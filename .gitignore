@@ -1,0 +1,4 @@
+.DS_Store
+*.log
+acceptor/acceptor
+responder/responder
