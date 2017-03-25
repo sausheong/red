@@ -9,11 +9,14 @@ import (
 	"runtime"
 )
 
-var RESPOND func(RequestInfo, *ResponseInfo)
 var ROUTEID string
 
+func init() {
+	ROUTEID = os.Getenv("ID")
+}
+
 // Run subscribe to a subject with a given callback function
-func Run() {
+func Run(respond func(RequestInfo, *ResponseInfo)) {
 	// setup log file
 	file, err := os.OpenFile("responder.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
@@ -37,7 +40,16 @@ func Run() {
 		}
 		// call act function to respond to the request
 		resp_info := ResponseInfo{}
-		act(req_info, &resp_info)
+
+		//
+		// set response to 200 OK by default
+		resp_info.Status = "200"
+		// initialize to an empty header
+		resp_info.Header = make(map[string][]string)
+		// call the respond function passed in from the responder
+		respond(req_info, &resp_info)
+		//
+
 		// marshal response to JSON
 		resp_json, err := json.Marshal(resp_info)
 		if err != nil {
@@ -63,14 +75,4 @@ func Run() {
 
 	runtime.Goexit()
 	conn.Close()
-}
-
-// act on the request
-func act(request RequestInfo, response *ResponseInfo) {
-	// set response to 200 OK by default
-	response.Status = "200"
-	// initialize to an empty header
-	response.Header = make(map[string][]string)
-	// call the RESPOND method
-	RESPOND(request, response)
 }

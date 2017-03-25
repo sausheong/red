@@ -2,3 +2,6 @@
 *.log
 acceptor/acceptor
 responder/responder
+*.db
+responder/repo/*
+responder/bin/*

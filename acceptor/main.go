@@ -126,8 +126,6 @@ func accept(writer http.ResponseWriter, request *http.Request, _ httprouter.Para
 	}
 
 	// set the identity to the route ID eg GET/_/path
-	fmt.Println(string(response.Data))
-
 	respInfo := ResponseInfo{}
 	err = json.Unmarshal(response.Data, &respInfo)
 	if err != nil {

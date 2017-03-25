@@ -116,11 +116,11 @@ func (resp *ResponseInfo) RedirectTo(url string) {
 }
 
 func (resp *ResponseInfo) SetHTML() {
-	response.AddHeader("Content-Type", "text/html; charset=utf-8")
+	resp.AddHeader("Content-Type", "text/html; charset=utf-8")
 }
 
 func (resp *ResponseInfo) SetJSON() {
-	response.AddHeader("Content-Type", "application/json; charset=utf-8")
+	resp.AddHeader("Content-Type", "application/json; charset=utf-8")
 }
 
 // embedded db methods
