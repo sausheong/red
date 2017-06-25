@@ -11,21 +11,31 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"strings"
 )
 
-type Manifest []struct {
-	Language   string `json:"language"`
-	Responders []struct {
-		ID    string `json:"id"`
-		Path  string `json:"path"`
-		Count int    `json:"-"`
-	} `json:"responders"`
+type Manifest struct {
+	Copy []struct {
+		From string `json:"from"`
+		To   string `json:"to"`
+	} `json:"copy"`
+	Groups []struct {
+		Language   string `json:"language"`
+		Responders []struct {
+			ID    string `json:"id"`
+			Path  string `json:"path"`
+			Count int    `json:"-"`
+		} `json:"responders"`
+	} `json:"routes"`
 }
 
 // get the repo
 func repo() (r *git.Repository, err error) {
 	r, err = git.PlainOpen("./repo")
+	if err != nil {
+		danger("Cannot open repository:", err)
+	}
 	return
 }
 
@@ -35,12 +45,18 @@ func clone(url string) (err error) {
 		URL:      url,
 		Progress: os.Stdout,
 	})
+	if err != nil {
+		danger("Cannot clone from repository:", err)
+	}
 	return
 }
 
 // pull from repo
 func pull(r *git.Repository) (err error) {
 	err = r.Pull(&git.PullOptions{})
+	if err != nil {
+		danger("Cannot pull from repository:", err)
+	}
 	return
 }
 
@@ -48,10 +64,12 @@ func pull(r *git.Repository) (err error) {
 func commitHash(r *git.Repository) (hash string, err error) {
 	ref, err := r.Head()
 	if err != nil {
+		danger("Cannot get head from repository", err)
 		return
 	}
 	commit, err := r.Commit(ref.Hash())
 	if err != nil {
+		danger("Cannot get last commit:", err)
 		return
 	}
 	hash = commit.ID().String()[:7]
@@ -66,11 +84,14 @@ func build(path, id string) (err error) {
 		buildparams = append(buildparams, "repo/"+path)
 	}
 	cmd := exec.Command("go", buildparams...)
-	fmt.Println("Executing", strings.Join(cmd.Args, " "))
+	info("Executing", strings.Join(cmd.Args, " "))
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
 	err = cmd.Run()
-	fmt.Println(out.String())
+	if err != nil {
+		danger("Cannot build:", err)
+	}
+	info(out.String())
 	return
 }
 
@@ -78,13 +99,19 @@ func bundleInstall() (err error) {
 	_, err = os.Stat("repo/Gemfile")
 	if err == nil {
 		err = os.Chdir("repo")
+		if err != nil {
+			danger("Cannot change directory to repo:", err)
+		}
 		params := []string{"install"}
 		cmd := exec.Command("bundler", params...)
-		fmt.Println("Executing", strings.Join(cmd.Args, " "))
+		info("Executing", strings.Join(cmd.Args, " "))
 		var out bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &out, &out
 		err = cmd.Run()
-		fmt.Println(out.String())
+		if err != nil {
+			danger("Cannot run bundler install:", err)
+		}
+		info(out.String())
 		err = os.Chdir("..")
 	}
 	return
@@ -98,6 +125,25 @@ func getManifest() (m Manifest, err error) {
 	}
 	m = Manifest{}
 	err = json.Unmarshal(manifestFile, &m)
+	if err != nil {
+		danger("Cannot read manifest file", err)
+	}
+	return
+}
+
+func buildResponder(id, path, lang string) (err error) {
+	if lang == "go" {
+		err = build(path, id)
+		if err != nil {
+			danger("Cannot build", path, id)
+		}
+	}
+	if lang == "ruby" {
+		err = copyRubyFile(path, id)
+		if err != nil {
+			danger("Cannot copy Ruby files", path, id)
+		}
+	}
 	return
 }
 
@@ -107,11 +153,15 @@ func buildResponders() (err error) {
 	if err != nil {
 		return
 	}
-	for _, group := range manifest {
+	// build responders
+	for _, group := range manifest.Groups {
 		// for Go responders build them into the bin directory
 		if group.Language == "go" {
 			for _, responder := range group.Responders {
 				err = build(responder.Path, responder.ID)
+				if err != nil {
+					danger("Cannot build", responder.Path, responder.ID)
+				}
 			}
 		}
 		// for Ruby responders copy them into the bin directory and
@@ -119,44 +169,149 @@ func buildResponders() (err error) {
 		if group.Language == "ruby" {
 			err = bundleInstall()
 			for _, responder := range group.Responders {
-				err = copyFile(responder.Path, responder.ID)
+				err = copyRubyFile(responder.Path, responder.ID)
+				if err != nil {
+					danger("Cannot copy Ruby files", responder.Path, responder.ID)
+				}
 			}
+		}
+	}
+
+	// copy files
+	for _, cp := range manifest.Copy {
+		err = copyDir("repo/"+cp.From, "bin/"+cp.To)
+		if err != nil {
+			danger("Cannot copy dir", "repo/"+cp.From, "bin/"+cp.To)
 		}
 	}
 	return
 }
 
-func copyFile(inFilename, outFilename string) (err error) {
+func copyRubyFile(inFilename, outFilename string) (err error) {
 	basepath := "bin/" + path.Dir(outFilename)
 	err = os.MkdirAll(basepath, 0777)
 	if err != nil {
-		fmt.Println("cannot create directory", err)
+		danger("cannot create directory", err)
 		return
 	}
 
 	out, err := os.Create("bin/" + outFilename)
 	if err != nil {
-		fmt.Println("cannot open outfile", err)
+		danger("cannot open outfile", err)
 		return
 	}
 	defer out.Close()
 	in, err := os.OpenFile("repo/"+inFilename, os.O_RDONLY, 0)
 	if err != nil {
-		fmt.Println("cannot open infile", err)
+		danger("cannot open infile", err)
 		return
 	}
 	defer in.Close()
 	_, err = io.Copy(out, in)
 	if err != nil {
-		fmt.Println("cannot copy file", err)
+		danger("cannot copy file", err)
 		return
 	}
 
 	err = os.Chmod("bin/"+outFilename, 0755)
 	if err != nil {
-		fmt.Println("cannot change permission", err)
+		danger("cannot change permission", err)
 		return
 	}
+	return
+}
+
+func copyDir(src string, dst string) (err error) {
+	src = filepath.Clean(src)
+	dst = filepath.Clean(dst)
+
+	si, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	if !si.IsDir() {
+		return fmt.Errorf("source is not a directory")
+	}
+
+	_, err = os.Stat(dst)
+	if err != nil && !os.IsNotExist(err) {
+		return
+	}
+	if err == nil {
+		return fmt.Errorf("destination already exists")
+	}
+
+	err = os.MkdirAll(dst, si.Mode())
+	if err != nil {
+		return
+	}
+
+	entries, err := ioutil.ReadDir(src)
+	if err != nil {
+		return
+	}
+
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		dstPath := filepath.Join(dst, entry.Name())
+
+		if entry.IsDir() {
+			err = copyDir(srcPath, dstPath)
+			if err != nil {
+				return
+			}
+		} else {
+			// Skip symlinks.
+			if entry.Mode()&os.ModeSymlink != 0 {
+				continue
+			}
+
+			err = copyFile(srcPath, dstPath)
+			if err != nil {
+				return
+			}
+		}
+	}
+
+	return
+}
+
+func copyFile(src, dst string) (err error) {
+	in, err := os.Open(src)
+	if err != nil {
+		return
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return
+	}
+	defer func() {
+		if e := out.Close(); e != nil {
+			err = e
+		}
+	}()
+
+	_, err = io.Copy(out, in)
+	if err != nil {
+		return
+	}
+
+	err = out.Sync()
+	if err != nil {
+		return
+	}
+
+	si, err := os.Stat(src)
+	if err != nil {
+		return
+	}
+	err = os.Chmod(dst, si.Mode())
+	if err != nil {
+		return
+	}
+
 	return
 }
 

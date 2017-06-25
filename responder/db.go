@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
-	"github.com/sausheong/red/responder/utils"
+	"github.com/sausheong/legion/responder/utils"
 	"time"
 )
 
@@ -13,7 +13,7 @@ var Db *sqlx.DB
 // connect to the Db
 func init() {
 	var err error
-	Db, err = sqlx.Open("postgres", "host=localhost user=red dbname=red password=red1234 sslmode=disable")
+	Db, err = sqlx.Open("postgres", "host=localhost user=legion dbname=legion password=red1234 sslmode=disable")
 	if err != nil {
 		panic(err)
 	}
@@ -95,17 +95,18 @@ func (session *Session) DeleteByUUID() (err error) {
 	return
 }
 
-// Repository
-type RepositoryData struct {
-	Repo string `db:"repo"`
+// Settings
+type SettingsData struct {
+	Queue string `db:"queue"`
+	Repo  string `db:"repo"`
 }
 
-func (u *RepositoryData) Get() (err error) {
-	err = Db.QueryRowx("SELECT * from repository").StructScan(u)
+func (u *SettingsData) Get() (err error) {
+	err = Db.QueryRowx("SELECT * from settings").StructScan(u)
 	return
 }
 
-func (r *RepositoryData) Set() (err error) {
-	_, err = Db.NamedExec("UPDATE repository SET repo = :repo", map[string]interface{}{"repo": r.Repo})
+func (r *SettingsData) Set() (err error) {
+	_, err = Db.NamedExec("UPDATE settings SET queue = :queue, repo = :repo", map[string]interface{}{"repo": r.Repo, "queue": r.Queue})
 	return
 }

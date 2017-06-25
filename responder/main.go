@@ -5,6 +5,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"html/template"
 	"net/http"
+	"strconv"
 )
 
 func main() {
@@ -29,7 +30,11 @@ func main() {
 	router.POST("/responders/settings", responderSettingsAction)
 	router.GET("/responders/run/all", respondersRunAll)
 	router.GET("/responders/stop/all", respondersStopAll)
-
+	router.GET("/responders/responder", responder)
+	router.POST("/responders/responder/start", responderStart)
+	router.GET("/responders/responder/build", responderBuild)
+	router.GET("/responders/responder/stop", responderStop)
+	router.GET("/files", files)
 	fmt.Println("Polyglot Responder v0.2 started at", addr)
 	server.ListenAndServe()
 
@@ -44,19 +49,85 @@ func index(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	}
 }
 
+func files(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	t, _ := template.ParseFiles("html/files.html", "html/nav.html")
+	// manifest, err := getManifest()
+	// if err != nil {
+	// 	danger("Cannot get manifest:", err)
+	// }
+
+	t.Execute(w, nil)
+}
+
+func responder(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	id := r.FormValue("id")
+	path := r.FormValue("path")
+	lang := r.FormValue("lang")
+	t, _ := template.ParseFiles("html/responder.html", "html/nav.html")
+	data := struct {
+		ID       string
+		Path     string
+		Language string
+		Count    int
+	}{
+		id,
+		path,
+		lang,
+		len(ProcessMap[id]),
+	}
+	t.Execute(w, data)
+}
+
+func responderStart(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	id := r.FormValue("id")
+	lang := r.FormValue("lang")
+	num := r.PostFormValue("num")
+	count, _ := strconv.Atoi(num)
+	info("Starting", num, "responders at", id)
+	settings := SettingsData{}
+	settings.Get()
+	for i := 0; i < count; i++ {
+		runProcess(id, lang, settings.Queue)
+	}
+	http.Redirect(w, r, "/responders/responder?id="+id, 302)
+}
+
+func responderBuild(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	id := r.FormValue("id")
+	lang := r.FormValue("lang")
+	path := r.PostFormValue("path")
+	info("Building responder", id)
+	err := buildResponder(id, path, lang)
+	if err != nil {
+		danger("Cannot build responder", id)
+	}
+
+	http.Redirect(w, r, "/responders/responder?id="+id, 302)
+}
+
+func responderStop(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	id := r.FormValue("id")
+	info("Stopping responder", id)
+	err := stopProcess(id)
+	if err != nil {
+		danger("Cannot stop responder", id)
+	}
+	http.Redirect(w, r, "/responders/responder?id="+id, 302)
+}
+
 func responders(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	t, _ := template.ParseFiles("html/responders.html", "html/nav.html")
 	repo, err := repo()
 	if err != nil {
-		fmt.Println("Cannot get repository:", err)
+		danger("Cannot get repository:", err)
 	}
 	manifest, err := getManifest()
 	if err != nil {
-		fmt.Println("Cannot get manifest:", err)
+		danger("Cannot get manifest:", err)
 	}
 	hash, err := commitHash(repo)
 	if err != nil {
-		fmt.Println("Cannot get hash:", err)
+		danger("Cannot get hash:", err)
 	}
 
 	data := struct {
@@ -67,9 +138,9 @@ func responders(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		manifest,
 	}
 
-	for i, group := range data.Manifest {
+	for i, group := range data.Manifest.Groups {
 		for j, r := range group.Responders {
-			data.Manifest[i].Responders[j].Count = len(ProcessMap[r.ID])
+			data.Manifest.Groups[i].Responders[j].Count = len(ProcessMap[r.ID])
 		}
 	}
 
@@ -80,48 +151,53 @@ func responders(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 
 func responderSettings(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	t, _ := template.ParseFiles("html/responders_settings.html", "html/nav.html")
-	d := RepositoryData{}
+	d := SettingsData{}
 	err := d.Get()
 	if err != nil {
-		fmt.Println("Cannot get repository:", err)
+		danger("Cannot get settings:", err)
 	}
 	t.Execute(w, d)
 }
 
 func responderSettingsAction(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	repo := r.PostFormValue("repo")
-	d := RepositoryData{Repo: repo}
+	queue := r.PostFormValue("queue")
+	d := SettingsData{Queue: queue, Repo: repo}
 	err := d.Set()
 	if err != nil {
-		fmt.Println("Cannot set repository:", err)
+		danger("Cannot set settings:", err)
 	}
+	info("Set settings to", repo, queue)
 	http.Redirect(w, r, "/responders/settings", 302)
 }
 
 func repoClone(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	d := RepositoryData{}
+	info("Cloning from repository")
+	d := SettingsData{}
 	err := d.Get()
 	if err != nil {
-		fmt.Println("Cannot get repository:", err)
+		danger("Cannot get repository:", err)
 	}
 	err = clone(d.Repo)
 	if err != nil {
-		fmt.Println("Cannot clone from repository:", err)
+		danger("Cannot clone from repository:", err)
 	}
 }
 
 func repoPull(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	info("Pulling from repository")
 	repo, err := repo()
 	if err != nil {
-		fmt.Println("Cannot get repository:", err)
+		danger("Cannot get repository:", err)
 	}
 	err = pull(repo)
 	if err != nil {
-		fmt.Println("Cannot pull from repository:", err)
+		danger("Cannot pull from repository:", err)
 	}
 }
 
 func repoBuildResponders(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	info("Building all responders")
 	go buildResponders()
 	// if err != nil {
 	// 	fmt.Println("Cannot build:", err)
@@ -132,15 +208,19 @@ func repoBuildResponders(w http.ResponseWriter, r *http.Request, _ httprouter.Pa
 }
 
 func respondersRunAll(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	err := runAll()
+	info("Starting all responders")
+	settings := SettingsData{}
+	settings.Get()
+	err := runAll(settings.Queue)
 	if err != nil {
-		fmt.Println("Cannot run all responders:", err)
+		danger("Cannot run all responders:", err)
 	} else {
 		http.Redirect(w, r, "/responders", 302)
 	}
 }
 
 func respondersStopAll(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	info("Stopping all responders")
 	stopAll()
 	http.Redirect(w, r, "/responders", 302)
 }

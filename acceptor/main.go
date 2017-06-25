@@ -22,7 +22,7 @@ func main() {
 	router.GET("/_/*p", accept)
 	router.POST("/_/*p", accept)
 
-	router.ServeFiles("/_s/*filepath", http.Dir("public"))
+	router.ServeFiles("/_s/*filepath", http.Dir("../responder/bin/public"))
 	server := &http.Server{
 		Addr:           addr,
 		Handler:        router,

@@ -1,0 +1,4 @@
+psql -c "CREATE USER legion WITH PASSWORD 'red1234';"
+psql -c "CREATE DATABASE legion;"
+psql -c "GRANT ALL PRIVILEGES ON DATABASE legion to legion;"
+psql -c "INSERT INTO settings(queue, repo) VALUES ('','');"

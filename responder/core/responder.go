@@ -10,9 +10,11 @@ import (
 )
 
 var ROUTEID string
+var QUEUE string
 
 func init() {
 	ROUTEID = os.Getenv("ID")
+	QUEUE = os.Getenv("QUEUE")
 }
 
 // Run subscribe to a subject with a given callback function
@@ -25,7 +27,7 @@ func Run(respond func(RequestInfo, *ResponseInfo)) {
 	logger = log.New(file, "INFO ", log.Ldate|log.Ltime|log.Lshortfile)
 
 	// connect to localhost NATS server
-	conn, err := nats.Connect(nats.DefaultURL)
+	conn, err := nats.Connect(QUEUE)
 	if err != nil {
 		danger("Cannot connect to NATS server", err)
 	}

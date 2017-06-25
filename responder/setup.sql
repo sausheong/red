@@ -16,7 +16,8 @@ CREATE TABLE sessions (
 	date_created timestamp default CURRENT_TIMESTAMP
 );
 
-CREATE TABLE repository (
+CREATE TABLE settings (
+	queue varchar(255),
 	repo varchar(255)
 );
 

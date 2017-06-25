@@ -2,7 +2,7 @@
 <html>
 <head>
 	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-	<title>Red</title>
+	<title>legion</title>
 	<meta content='width=device-width, initial-scale=1.0, maximum-scale=1.0' name='viewport'>
 	<meta content='none' name='robots'>
 	<link href='/static/css/bootstrap.min.css' rel='stylesheet' type='text/css'>
@@ -17,15 +17,31 @@
 		{{ template "nav" }}
 		<div class="pull-left">Last commit: {{ .Hash }}</div>
 		<div class="btn-group pull-right" role="group" aria-label="...">
-			<button type="button" class="btn btn-default" onclick="location.href='/responders/run/all';"><span class="fa fa-play">&nbsp;</span><span class="hidden-xs">start all</span></button>
-			<button type="button" class="btn btn-default" onclick="location.href='/responders/stop/all';"><span class="fa fa-stop">&nbsp;</span><span class="hidden-xs">stop all</span></button>
-			<button type="button" class="btn btn-default" onclick="location.href='/repo/build/responders';"><span class="fa fa-wrench">&nbsp;</span><span class="hidden-xs">build</span></button>
-			<button type="button" class="btn btn-default"><span class="fa fa-arrow-right">&nbsp;</span><span class="hidden-xs">pull</span></button>
-			<button type="button" class="btn btn-default"><span class="fa fa-clone">&nbsp;</span><span class="hidden-xs">clone</span></button>
+			<button type="button" class="btn btn-default" onclick="location.href='/responders/run/all';">
+			<span class="fa fa-play">&nbsp;</span>
+			<span class="hidden-xs">start all</span>
+			</button>
+			<button type="button" class="btn btn-default" onclick="location.href='/responders/stop/all';">
+				<span class="fa fa-stop">&nbsp;</span>
+				<span class="hidden-xs">stop all</span>
+			</button>
+			<button type="button" class="btn btn-default" onclick="location.href='/repo/build/responders';">
+				<span class="fa fa-wrench">&nbsp;</span>
+				<span class="hidden-xs">build</span>
+			</button>
+			<button type="button" class="btn btn-default" onclick="location.href='/repo/pull';">
+				<span class="fa fa-arrow-right">&nbsp;</span>
+				<span class="hidden-xs">pull</span>
+			</button>
+			<button type="button" class="btn btn-default" onclick="location.href='/repo/clone';">
+				<span class="fa fa-clone">&nbsp;</span>
+				<span class="hidden-xs">clone</span>
+			</button>
 		</div>
 		&nbsp;
-		{{ range .Manifest }}
-		<h3>{{ .Language }}</h3>
+		{{ range .Manifest.Groups }}
+		{{ $language := .Language }}
+		<h3>{{ $language }}</h3>
 		<div id="panel" class="col-md-12">
 		<table class="table table-condensed">
 			<thead>
@@ -39,7 +55,7 @@
 				{{ range .Responders }}
 				<tr>
 					<td>
-						{{.ID }}
+						<a href="/responders/responder?id={{ .ID }}&path={{ .Path }}&lang={{ $language }}">{{.ID }}</a>
 					</td>	
 					<td>	
 						{{.Path }}
